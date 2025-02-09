@@ -1,14 +1,59 @@
-﻿using System.Security.Cryptography;
+﻿using Microsoft.AspNetCore.SignalR.Client;
+using System.Security.Cryptography;
 using ToolBox.Security.Rsa;
 
+Dictionary<string, ConnectionInfos> connectedUsers = new Dictionary<string, ConnectionInfos>();
+
+// création du service de crypto
 RSACryptoServiceProvider rsa = new(4096);
-EncryptionService s1 = new(rsa);
-EncryptionService s2 = new(rsa);
+EncryptionService service = new(rsa);
 
-string messageFromS1 = s1.Encrypt("Coucou", s2.PublicKey);
-Console.WriteLine(messageFromS1);
-Console.WriteLine(s2.Decrypt(messageFromS1));
+// création de la connection signalR
+HubConnection connection = new HubConnectionBuilder()
+    .WithUrl("http://localhost:5148/ws/message").Build();
 
-string messageFromS2 = s2.Encrypt("Comment ca va ☺?", s1.PublicKey);
-Console.WriteLine(messageFromS2);
-Console.WriteLine(s1.Decrypt(messageFromS2));
+// démarrer le connection
+await connection.StartAsync();
+
+connection.On<Dictionary<string, ConnectionInfos>>("connectionsChanged", personnes => {
+    connectedUsers = personnes;
+    Console.WriteLine($"Connected users : {string.Join(",", personnes.Keys)}");
+});
+
+connection.On<string>("messageReceived", message =>
+{
+    try
+    {
+        Console.ForegroundColor = ConsoleColor.Green;
+        Console.WriteLine($"Message recu: {service.Decrypt(message)}");
+        Console.ResetColor();
+    }
+    catch (Exception ex)
+    {
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine($"Message recu: {message}");
+        Console.ResetColor();
+    }
+    
+});
+
+await connection.InvokeAsync("Connect", new { Nom = Console.ReadLine() ?? string.Empty, PubKey = service.PublicKey });
+
+while (true)
+{
+    string dest = Console.ReadLine() ?? string.Empty;
+    if(!connectedUsers.TryGetValue(dest, out ConnectionInfos? infos))
+    {
+        Console.WriteLine("...");
+        continue;
+    }
+
+    string message = Console.ReadLine() ?? string.Empty;
+    await connection.InvokeAsync("SendMessage", new { Nom = dest, EncodedMessage = service.Encrypt(message, infos!.PublicKey) });
+}
+
+public class ConnectionInfos
+{
+    public string ConnectionId { get; set; } = null!;
+    public string PublicKey { get; set; } = null!;
+}
