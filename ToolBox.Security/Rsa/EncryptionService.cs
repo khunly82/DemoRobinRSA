@@ -6,7 +6,7 @@ using System.Text;
 
 namespace ToolBox.Security.Rsa
 {
-    public class EncriptionService(RSACryptoServiceProvider provider)
+    public class EncryptionService(RSACryptoServiceProvider provider)
     {
         private readonly string _privateKey = provider.ExportRSAPrivateKeyPem(); 
         private readonly string _publicKey = provider.ExportRSAPublicKeyPem();
